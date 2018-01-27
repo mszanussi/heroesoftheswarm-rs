@@ -67,11 +67,8 @@ impl World {
         let (x, y) = self.random_position();
         // Get a random color
         let color = World::random_color();
-        self.swarms.insert(
-            id,
-            Swarm::new(x, y, initial_num_members)
-                .with_color(color),
-        );
+        self.swarms
+            .insert(id, Swarm::new(x, y, initial_num_members).with_color(color));
     }
 
     /// Removes a player to the server with the given ID
@@ -115,11 +112,14 @@ impl World {
         }
         // Update each bullet
         // TODO: different logic for this as a bullet could be destroyed
-        for i in 0..self.bullets.len() {
+        let mut i: usize = 0;
+        while i < self.bullets.len() {
             self.bullets[i].update();
             if self.bullets[i].duration == 0 {
                 self.bullets.swap_remove(i);
+                i += 1;
             }
+            i += 1;
         }
         // Record time at end of update and return the time elapsed
         Instant::now().duration_since(start_time)
