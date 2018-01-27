@@ -40,7 +40,7 @@ impl FromStr for SwarmCommand {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // TODO: Parse a line of swarm code as an enum
 
-        let command: Vec<&str> = s.trim().split(" ").collect();
+        let command: Vec<&str> = s.trim().split_whitespace().collect();
 
         // Match
         match &command[0] {
@@ -137,8 +137,14 @@ impl FromStr for SwarmProgram {
         for line in s.trim().lines() {
             command_list.push(match line.parse() {
                 Ok(comm) => comm,                // If the command is valid, add it to the list
-                Err(error) => return Err(error), // If the command is invalid, throw and error
+                Err(error) => if line.trim().is_empty() {continue} else {return Err(error)}, // If the command is invalid, throw an error
             });
+			
+			// If the command list size is exceeded, throw an error
+			if(command_list.len() > MAX_NUM_COMMANDS)
+			{
+				return Err(GenericError{ description: "Program is too long: use fewer commands.".into()})
+			}
         }
 
         // Return command list
