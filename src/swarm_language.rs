@@ -155,7 +155,7 @@ impl FromStr for SwarmProgram {
 #[test]
 fn test_comlist_generator() {
     let mut program: String = String::new();
-    program = "  MOVE\n   TURN 30.0\n MOVE\n     NOOP\n   FIRE".into(); // String is goofy to test whitespace stripping
+    program = "MOVE\nTURN 30.0\nMOVE\nNOOP\nFIRE\nMOVE\nFIRE\n\n\nMOVE\nFIRE".into(); // String is goofy to test whitespace stripping
 
     // Generate command list from program
     let command_list: SwarmProgram = match program.parse() {
@@ -169,6 +169,10 @@ fn test_comlist_generator() {
     assert_eq!(command_list.commands[2], SwarmCommand::MOVE);
     assert_eq!(command_list.commands[3], SwarmCommand::NOOP);
 	assert_eq!(command_list.commands[4], SwarmCommand::FIRE);
+	assert_eq!(command_list.commands[5], SwarmCommand::MOVE);
+    assert_eq!(command_list.commands[6], SwarmCommand::FIRE);
+    assert_eq!(command_list.commands[7], SwarmCommand::MOVE);
+	assert_eq!(command_list.commands[8], SwarmCommand::FIRE);
 }
 
 #[cfg(test)]
