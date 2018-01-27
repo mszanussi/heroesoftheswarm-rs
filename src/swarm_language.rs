@@ -45,6 +45,7 @@ impl FromStr for SwarmCommand {
         // Match
         match &command[0] {
             &"MOVE" => Ok(SwarmCommand::MOVE), // Move command case
+			&"FIRE" => Ok(SwarmCommand::FIRE), // Fire Command case
             &"NOOP" => Ok(SwarmCommand::NOOP), // Noop command case
             &"TURN" => if command.len() == 2
             // Check if turn parameter was provided
@@ -148,7 +149,7 @@ impl FromStr for SwarmProgram {
 #[test]
 fn test_comlist_generator() {
     let mut program: String = String::new();
-    program = "  MOVE\n   TURN 30.0\n MOVE\n     NOOP\n".into(); // String is goofy to test whitespace stripping
+    program = "  MOVE\n   TURN 30.0\n MOVE\n     NOOP\n   FIRE".into(); // String is goofy to test whitespace stripping
 
     // Generate command list from program
     let command_list: SwarmProgram = match program.parse() {
@@ -161,6 +162,7 @@ fn test_comlist_generator() {
     assert_eq!(command_list.commands[1], SwarmCommand::TURN(30.0));
     assert_eq!(command_list.commands[2], SwarmCommand::MOVE);
     assert_eq!(command_list.commands[3], SwarmCommand::NOOP);
+	assert_eq!(command_list.commands[4], SwarmCommand::FIRE);
 }
 
 #[cfg(test)]
