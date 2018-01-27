@@ -26,6 +26,8 @@ const MAX_NUM_COMMANDS: usize = 20;
 pub enum SwarmCommand {
     /// Move the swarm forward
     MOVE,
+    /// Swarm fires a bullet in indicated direction
+    FIRE,
     /// Rotate the swarm some number of degrees
     TURN(f32),
     /// Do nothing
@@ -41,34 +43,41 @@ impl FromStr for SwarmCommand {
         // TODO: Parse a line of swarm code as an enum
 
         let command: Vec<&str> = s.trim().split_whitespace().collect();
+		
+		if (command.len() == 0)
+			{return Err(GenericError{ description: "Command is white space (should be non-error).".into()})};
 
         // Match
         match &command[0] {
             &"MOVE" => Ok(SwarmCommand::MOVE), // Move command case
 			&"FIRE" => Ok(SwarmCommand::FIRE), // Fire Command case
             &"NOOP" => Ok(SwarmCommand::NOOP), // Noop command case
-            &"TURN" => if command.len() == 2
-            // Check if turn parameter was provided
-            {
-                match command[1].parse::<f32>() {
-                    Ok(val) => if val.is_normal() {
-                        Ok(SwarmCommand::TURN(val))
-                    }
-                    // If parameter is valid, return from function
-                    else {
-                        Err(GenericError {
+            &"TURN" => {
+                if command.len() == 2
+                // Check if turn parameter was provided
+                {
+                    match command[1].parse::<f32>() {
+                        Ok(val) => {
+                            if val.is_normal() {
+                                Ok(SwarmCommand::TURN(val))
+                            }
+                            // If parameter is valid, return from function
+                            else {
+                                Err(GenericError::new(
+                                    "Invalid float parameter for TURN.".into(),
+                                ))
+                            }
+                        } // If parameter is not normal, throw error
+                        Err(_) => Err(GenericError {
                             description: "Invalid float parameter for TURN.".into(),
-                        })
-                    }, // If parameter is not normal, throw error
-                    Err(_) => Err(GenericError {
-                        description: "Invalid float parameter for TURN.".into(),
-                    }), // If parameter cannot be converted to float, throw error
+                        }), // If parameter cannot be converted to float, throw error
+                    }
+                } else {
+                    Err(GenericError {
+                        description: "No parameters found for TURN.".into(),
+                    })
                 }
-            } else {
-                Err(GenericError {
-                    description: "No parameters found for TURN.".into(),
-                })
-            }, // No parameter provided
+            } // No parameter provided
             _ => Err(GenericError {
                 description: "Command not recognized.".into(),
             }), // Invalid command case
@@ -154,8 +163,9 @@ impl FromStr for SwarmProgram {
 
 #[test]
 fn test_comlist_generator() {
+
     let mut program: String = String::new();
-    program = "MOVE\nTURN 30.0\nMOVE\nNOOP\nFIRE\nMOVE\nFIRE\n\n\nMOVE\nFIRE".into(); // String is goofy to test whitespace stripping
+    program = "MOVE\nFIRE\nMOVE\nTURN 36.2433\nNOOP\nNOOP\n\t \n  \t\n\nMOVE\nFIRE".into(); // String is goofy to test whitespace stripping
 
     // Generate command list from program
     let command_list: SwarmProgram = match program.parse() {
@@ -165,14 +175,13 @@ fn test_comlist_generator() {
 
     // Check if all commands registered correctly
     assert_eq!(command_list.commands[0], SwarmCommand::MOVE);
-    assert_eq!(command_list.commands[1], SwarmCommand::TURN(30.0));
+    assert_eq!(command_list.commands[1], SwarmCommand::FIRE);
     assert_eq!(command_list.commands[2], SwarmCommand::MOVE);
-    assert_eq!(command_list.commands[3], SwarmCommand::NOOP);
-	assert_eq!(command_list.commands[4], SwarmCommand::FIRE);
-	assert_eq!(command_list.commands[5], SwarmCommand::MOVE);
-    assert_eq!(command_list.commands[6], SwarmCommand::FIRE);
-    assert_eq!(command_list.commands[7], SwarmCommand::MOVE);
-	assert_eq!(command_list.commands[8], SwarmCommand::FIRE);
+    assert_eq!(command_list.commands[3], SwarmCommand::TURN(36.2433));
+	assert_eq!(command_list.commands[4], SwarmCommand::NOOP);
+	assert_eq!(command_list.commands[5], SwarmCommand::NOOP);
+    assert_eq!(command_list.commands[6], SwarmCommand::MOVE);
+    assert_eq!(command_list.commands[7], SwarmCommand::FIRE);
 }
 
 #[cfg(test)]

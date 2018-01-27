@@ -15,6 +15,7 @@
 // along with heroesoftheswarm.  If not, see <http://www.gnu.org/licenses/>.
 
 use futures::{Future, Sink, Stream};
+use rpc::{Configuration, Response, ResponseMessage};
 use std::fmt::Debug;
 use std::ops::DerefMut;
 use std::sync::{Arc, RwLock};
@@ -23,7 +24,6 @@ use std::thread;
 use std::time::Duration;
 use tokio_core::reactor::{Core, Handle};
 use websocket::message::{Message, OwnedMessage};
-use websocket::server::InvalidConnection;
 use websocket::async::Server;
 use world::World;
 
@@ -68,8 +68,20 @@ impl GameServer {
                 "U" => {
                     // Get a readable reference to the world
                     // (locks until the world is not being written)
-                    let world = world.read().unwrap();
-                    Some(OwnedMessage::Text(world.serialize().unwrap()))
+                    match world.read() {
+                        Ok(world) => {
+                            // Create a message type
+                            let message = Response::new(ResponseMessage::WORLD(world.get_state()));
+                            match message.serialize() {
+                                Ok(message) => Some(OwnedMessage::Text(message)),
+                                Err(error) => None,
+                            }
+                        }
+                        Err(error) => {
+                            warn!("Failed to get read lock on world. Not sending world state");
+                            None
+                        }
+                    }
                 }
                 _ => None,
             },
@@ -93,7 +105,7 @@ pub fn run() {
     let port: u16 = 8080;
     let update_freq: u64 = 60;
     // Create the world
-    let world: Arc<RwLock<World>> = Arc::new(RwLock::new(World::new(1000.0, 1000.0)));
+    let world: Arc<RwLock<World>> = Arc::new(RwLock::new(World::new(1600.0, 900.0)));
     // Copy a reference to world for the clients to use
     let world_client = world.clone();
     // Start the world's main thread
@@ -115,12 +127,16 @@ pub fn run() {
             // Sleep for some amount of time
             thread::sleep(update_delta - last_update_time);
             // Lock the world for writing
-            let mut write_lock = world.write().unwrap();
-            // Get a mutable reference to the world
-            let world_ref = write_lock.deref_mut();
-            // Update the world
-            last_update_time = world_ref.update()
-            // Write lock goes out of scope, world is again available to be read
+            match world.write() {
+                Ok(mut write_lock) => {
+                    // Get a mutable reference to the world
+                    let world_ref = write_lock.deref_mut();
+                    // Update the world
+                    last_update_time = world_ref.update();
+                    // Write lock goes out of scope, world is again available to be read
+                }
+                Err(error) => error!("Error retrieving write lock in update thread: {}", error),
+            }
         }
     });
     // Used to assign IDs to connections (players)
@@ -151,9 +167,23 @@ pub fn run() {
             }
             // Get a reference to the world for this connection
             let world = world_client.clone();
+            let w = world.clone();
             // Get an ID for this connection
             let session_id: usize = id_counter.fetch_add(1, AtomicOrdering::SeqCst);
-            info!("New session id: {}", session_id);
+            // Create a swarm for this session
+            match world.write() {
+                Ok(mut write_lock) => {
+                    // Get a mutable reference to the world
+                    let world_ref = write_lock.deref_mut();
+                    world_ref.add_player(session_id);
+                    // Write lock goes out of scope, world is again available to be read
+                },
+                Err(error) => {
+                    error!("Error getting write lock: {}. Player not added", error);
+                    spawn_future(upgrade.reject(), "Failed to add player to world", &handle);
+                    return Ok(());
+                }
+            }
             // accept the request to be a ws connection if it does
             let message_handler = upgrade
                 // Use our protocol
@@ -161,7 +191,20 @@ pub fn run() {
                 // Accept the message
                 .accept()
                 // Respond so the client knows the connection succeeded 
-                .and_then(move |(socket, _)| socket.send(Message::text(session_id.to_string()).into()))
+                .and_then(move |(socket, _)| {
+                    //socket.send(Message::text(session_id.to_string()).into());
+                    // Create a config object and send it to the client
+                    let config = Configuration::new(session_id); 
+                    // Create a response
+                    let response = Response::new(ResponseMessage::CONFIG(config));
+                    match response.serialize() {
+                        Ok(serialized) => socket.send(Message::text(serialized).into()),
+                        Err(error) => {
+                            error!("Failed to serialize config");
+                            socket.send(Message::text(r#"{"mt": "error", "message": {"error": "Failed to serialize config"}}"#).into())
+                        }
+                    }
+                })
                 // Build a message responder
                 .and_then(move |socket| {
                     // Get sink and stream
@@ -172,17 +215,33 @@ pub fn run() {
                         // Handle the input and generate output
                         .filter_map(move |message| {
                             // Log the message
-                            info!("Message from Client {}: {:?}", session_id, message);
+                            debug!("Message from Client {}: {:?}", session_id, message);
                             // Handle the message by type
                             GameServer::handle_message(message, &world)
                         })
                         .forward(sink)
                         .and_then(move |(_, sink)| {
+
+                            // Delete the swarm from this session
+                            match w.write() {
+                                Ok(mut write_lock) => {
+                                    // Get a mutable reference to the world
+                                    let world_ref = write_lock.deref_mut();
+                                    world_ref.remove_player(session_id);
+                                    // Write lock goes out of scope, world is again available to be read
+                                },
+                                Err(error) => {
+                                    error!("Error getting write lock: {}. Player not removed", error);
+                                
+                                }
+                            };
+                            // Send the close message
                             sink.send(OwnedMessage::Close(None))
                         })
                 });
 
             spawn_future(message_handler, "Client Status", &handle);
+            
             Ok(())
         });
     info!("Starting the server at {}:{}", hostname, port);
