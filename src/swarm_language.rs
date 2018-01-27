@@ -78,7 +78,7 @@ fn test_verifier()
                         Err(error) => panic!("Error encountered: {}", error),
                 };
 
-        let c3: SwarmCommand = match "TURN 3.1A".parse()
+        let c3: SwarmCommand = match "TURN 3.14".parse()
                 {
                         Ok(com3) => com3,
                         Err(error) => panic!("Error encountered: {}", error),
@@ -93,7 +93,7 @@ fn test_verifier()
 #[derive(Clone, Debug)]
 pub struct SwarmProgram {
     /// The list of commands
-    pub commands: [SwarmCommand; MAX_NUM_COMMANDS],
+    pub commands: Vec<SwarmCommand>,
 }
 
 /// Some functions for SwarmProgram
@@ -101,7 +101,7 @@ impl SwarmProgram {
     /// Constructor (empty)
     pub fn new() -> Self {
         SwarmProgram {
-            commands: [SwarmCommand::NOOP; MAX_NUM_COMMANDS],
+            commands: Vec::<SwarmCommand>::new(),
         }
     }
 }
@@ -114,8 +114,48 @@ impl FromStr for SwarmProgram {
     /// Converts a string to a SwarmProgram
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // TODO: Split the input and use SwarmCommand's from_str
-        unimplemented!()
+        // unimplemented!()
+		
+		// Vector of SwarmCommands
+		let mut command_list: Vec<SwarmCommand> = Vec::new();
+		
+		// Turn lines into commands
+		for line in s.trim().lines()
+		{
+			command_list.push
+			(
+				match line.parse()
+				{
+					Ok(comm)	=>	comm,					// If the command is valid, add it to the list
+					Err(error)	=>	return Err(error),		// If the command is invalid, throw and error
+				}
+			);
+		}
+		
+		// Return command list
+		Ok(SwarmProgram{commands: command_list})
     }
+}
+
+#[test]
+fn test_comlist_generator()
+{
+	let mut program: String = String::new();
+	program = "  MOVE\n   TURN 30.0\n MOVE\n     NOOP\n".into();	// String is goofy to test whitespace stripping
+	
+	// Generate command list from program
+	let command_list: SwarmProgram = match program.parse()
+		{
+			Ok(comlist)	=> comlist,
+			Err(error)	=> panic!("Program failed with error: {}", error),
+		};
+	
+	// Check if all commands registered correctly
+	assert_eq!(command_list.commands[0], SwarmCommand::MOVE);
+	assert_eq!(command_list.commands[1], SwarmCommand::TURN(30.0));
+	assert_eq!(command_list.commands[2], SwarmCommand::MOVE);
+	assert_eq!(command_list.commands[3], SwarmCommand::NOOP);
+	
 }
 
 #[cfg(test)]
