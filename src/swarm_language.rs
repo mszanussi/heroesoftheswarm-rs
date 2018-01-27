@@ -53,34 +53,35 @@ impl FromStr for SwarmCommand {
 			&"FIRE" => Ok(SwarmCommand::FIRE), // Fire Command case
             &"NOOP" => Ok(SwarmCommand::NOOP), // Noop command case
             &"TURN" => {
-                if command.len() == 2
-                // Check if turn parameter was provided
+                if command.len() == 2	// Check if turn parameter was provided
                 {
                     match command[1].parse::<f32>() {
-                        Ok(val) => {
+                        Ok(val) => 
                             if val.is_normal() {
-                                Ok(SwarmCommand::TURN(val))
-                            }
-                            // If parameter is valid, return from function
+									if (val.abs() <= 30.0_f32){
+										Ok(SwarmCommand::TURN(val))	// If value satisfies clamp conditions, 
+									}
+									else {
+										Err(GenericError::new("Input parameter float should range from -30.0 to 30.0.".into()))	// Otherwise, throw compilation error
+									}
+								}
+                            
+							
                             else {
                                 Err(GenericError::new(
-                                    "Invalid float parameter for TURN.".into(),
+                                    "Invalid float parameter for TURN.".into()	 // If parameter is not normal, throw error
                                 ))
-                            }
-                        } // If parameter is not normal, throw error
-                        Err(_) => Err(GenericError {
-                            description: "Invalid float parameter for TURN.".into(),
-                        }), // If parameter cannot be converted to float, throw error
+                            },
+							
+                        Err(_) => Err(GenericError::new("Invalid float parameter for TURN.".into())),	// If parameter cannot be converted to float, throw error
                     }
                 } else {
-                    Err(GenericError {
-                        description: "No parameters found for TURN.".into(),
-                    })
+                    Err(GenericError::new("No parameters found for TURN.".into()))	// No parameter provided 
                 }
-            } // No parameter provided
-            _ => Err(GenericError {
-                description: "Command not recognized.".into(),
-            }), // Invalid command case
+            } 
+            _ => Err(
+				GenericError::new("Command not recognized.".into())	// Invalid command case
+			), 
         }
     }
 }
@@ -98,14 +99,14 @@ fn test_verifier() {
         Err(error) => panic!("Error encountered: {}", error),
     };
 
-    let c3: SwarmCommand = match "TURN 3.14".parse() {
+    let c3: SwarmCommand = match "TURN -29.5".parse() {
         Ok(com3) => com3,
         Err(error) => panic!("Error encountered: {}", error),
     };
 
     assert_eq!(c1, SwarmCommand::NOOP);
     assert_eq!(c2, SwarmCommand::MOVE);
-    assert_eq!(c3, SwarmCommand::TURN(3.14));
+    assert_eq!(c3, SwarmCommand::TURN(-29.5));
 }
 
 /// A swarm program is a list of swarm commands
@@ -165,7 +166,7 @@ impl FromStr for SwarmProgram {
 fn test_comlist_generator() {
 
     let mut program: String = String::new();
-    program = "MOVE\nFIRE\nMOVE\nTURN 36.2433\nNOOP\nNOOP\n\t \n  \t\n\nMOVE\nFIRE".into(); // String is goofy to test whitespace stripping
+    program = "MOVE\nFIRE\nMOVE\nTURN -30.0\nNOOP\nNOOP\n\t \n  \t\n\nMOVE\nFIRE".into(); // String is goofy to test whitespace stripping
 
     // Generate command list from program
     let command_list: SwarmProgram = match program.parse() {
@@ -177,7 +178,7 @@ fn test_comlist_generator() {
     assert_eq!(command_list.commands[0], SwarmCommand::MOVE);
     assert_eq!(command_list.commands[1], SwarmCommand::FIRE);
     assert_eq!(command_list.commands[2], SwarmCommand::MOVE);
-    assert_eq!(command_list.commands[3], SwarmCommand::TURN(36.2433));
+    assert_eq!(command_list.commands[3], SwarmCommand::TURN(-30.0));
 	assert_eq!(command_list.commands[4], SwarmCommand::NOOP);
 	assert_eq!(command_list.commands[5], SwarmCommand::NOOP);
     assert_eq!(command_list.commands[6], SwarmCommand::MOVE);
