@@ -43,20 +43,23 @@ impl FromStr for SwarmCommand {
         // TODO: Parse a line of swarm code as an enum
 
         let command: Vec<&str> = s.trim().split_whitespace().collect();
+
+        if (command.len() == 0) {
+            return Err(GenericError {
+                description: "Command is white space (should be non-error).".into(),
+            });
+        };
+
+		let opcode: String = command[0].to_uppercase().into();
 		
-		if (command.len() == 0)
-			{return Err(GenericError{ description: "Command is white space (should be non-error).".into()})};
-			
-			
         // Match
-		let opcode = &command[0].to_uppercase()[..];
-        match opcode {
+        match &opcode[..] {
             "MOVE" => Ok(SwarmCommand::MOVE), // Move command case
-			"FIRE" => Ok(SwarmCommand::FIRE), // Fire Command case
+            "FIRE" => Ok(SwarmCommand::FIRE), // Fire Command case
             "NOOP" => Ok(SwarmCommand::NOOP), // Noop command case
             "TURN" => {
-                if command.len() == 2	// Check if turn parameter was provided
-
+                if command.len() == 2
+                // Check if turn parameter was provided
                 {
                     match command[1].parse::<f32>() {
                         Ok(val) => if val.is_normal() {

@@ -17,6 +17,7 @@ use swarm_language::SwarmProgram;
 use swarm_language::SwarmCommand;
 use world::World;
 use std::f32;
+use rand::{thread_rng, Rng};
 
 /// The initial size of a swarm
 const INITIAL_SWARM_SIZE: usize = 10;
@@ -34,7 +35,7 @@ pub struct Swarm {
     #[serde(skip_serializing)]
     pub direction: f32,
     /// Members of the swarm
-    pub members: Vec<Option<SwarmMember>>,
+    pub members: Vec<SwarmMember>,
     /// Offsets
     #[serde(skip_serializing)]
     pub offsets: Vec<(f32, f32)>,
@@ -79,12 +80,12 @@ impl Swarm {
         }
     }
     /// Builds a swarm of N members
-    pub fn build_swarm(num_members: usize, offsets: &Vec<(f32, f32)>) -> Vec<Option<SwarmMember>> {
+    pub fn build_swarm(num_members: usize, offsets: &Vec<(f32, f32)>) -> Vec<SwarmMember> {
         // Vector to store the swarm
-        let mut swarm: Vec<Option<SwarmMember>> = Vec::with_capacity(num_members);
+        let mut swarm = Vec::with_capacity(num_members);
         // add the members
         for i in 0..num_members {
-            swarm.push(Some(SwarmMember::new(offsets[i].0, offsets[i].1)))
+            swarm.push(SwarmMember::new(offsets[i].0, offsets[i].1))
         }
         // Return the swarm
         swarm
@@ -129,13 +130,8 @@ impl Swarm {
                     // Keep direction and program counter within their bounds
                     self.direction %= 360.0;
                     for member in self.members.iter_mut() {
-                        match member {
-                            &mut Some(mut member) => {
-                                member.direction += turn_amt;
-                                member.direction %= 360.0;
-                            }
-                            &mut None => {}
-                        }
+                        member.direction += turn_amt;
+                        member.direction %= 360.0;
                     }
                 }
                 SwarmCommand::NOOP => {}
@@ -150,19 +146,14 @@ impl Swarm {
     pub fn fire(&self, swarm_id: usize, bullets: &mut Vec<Bullet>) {
         // spawn bullet with velocity vector
         for member in &self.members {
-            match member {
-                &Some(cur_swarm_member) => {
-                    let new_bullet: Bullet = Bullet::new(
-                        swarm_id,
-                        self.x + cur_swarm_member.x,
-                        self.y + cur_swarm_member.y,
-                        self.direction,
-                        self.bullet_duration,
-                    );
-                    bullets.push(new_bullet);
-                }
-                &None => {}
-            }
+            let new_bullet: Bullet = Bullet::new(
+                swarm_id,
+                self.x + member.x,
+                self.y + member.y,
+                self.direction,
+                self.bullet_duration,
+            );
+            bullets.push(new_bullet);
         }
     }
 
@@ -178,26 +169,76 @@ impl Swarm {
 
             // Generate i*4 positions for each shell
             for j in 0..(i * 4) {
-                let rads: f32 = (j as f32) * ((3.141592654) / (2.0 * shell)); // Calculate angle of current offset
-                offset_list.push((shell * radius * (rads.cos()), shell * radius * (rads.sin()))); // Push scaled coordinates onto array
+                // Calculate angle of current offset
+                let rads: f32 = (j as f32) * ((f32::consts::PI) / (2.0 * shell));
+                // Push scaled coordinates onto array
+                offset_list.push((shell * radius * rads.cos(), shell * radius * rads.sin()));
             }
         }
 
         // Return generated offsets
         offset_list
     }
+	
+	pub fn sierpinski_offset(focal_count: u32) -> Vec<(f32,f32)>
+	{
+		if(focal_count < 3)
+		{
+			let mut points: Vec<(f32,f32)> = Vec::new();
+			
+			for i in 0..29
+			{
+				points.push(((i as f32) - 14.0, 0.0));
+			}
+			
+			return points;
+		}
+	
+		let mut foci: Vec<(f32,f32)> = Vec::new();
+		
+		// Generate object focal points
+		for i in 0..focal_count
+		{
+			let radians = (i as f32)*((f32::consts::PI)/((focal_count as f32)));
+			foci.push(((radians + f32::consts::PI/2.0).cos(),(radians + f32::consts::PI/2.0).sin()));
+		}
+		
+		let mut point_set: Vec<(f32,f32)> = Vec::new();
+		point_set.push((0.0,0.0));
+		for n in 0..34
+		{
+			let mut rng = thread_rng();
+			let randint: u32 = rng.gen::<u32>() % focal_count;
+			//let randint: u32 = random::<u32>() % focal_count;0
+			let new_point = (((focal_count - 2) as f32)*((point_set[(n as usize)].0 + foci[randint as usize].0)/((focal_count as f32)-1.0))
+							, ((focal_count - 2) as f32)*((point_set[(n as usize)].1 + foci[randint as usize].1)/((focal_count as f32)-1.0)));
+			
+			point_set.push(new_point);
+		}
+		
+		
+		// Remove first five elements
+		point_set.remove(0);
+		point_set.remove(0);
+		point_set.remove(0);
+		point_set.remove(0);
+		point_set.remove(0);
+		
+		point_set
+			
+	}
 }
 
 #[test]
 fn test_offset_calc() {
-    let rad1: f32 = 1.0;
-    let rad2: f32 = 2.5;
+    //let rad1: f32 = 1.0;
+    //let rad2: f32 = 2.5;
 
-    let ooflist1: Vec<(f32, f32)> = Swarm::calculate_offsets(rad1);
-    let ooflist2: Vec<(f32, f32)> = Swarm::calculate_offsets(rad2);
+    let ooflist1: Vec<(f32, f32)> = Swarm::sierpinski_offset(3 as u32);
+    let ooflist2: Vec<(f32, f32)> = Swarm::sierpinski_offset(5 as u32);
 
     println!("Offsets of radius 1.0:");
-    for tuple in ooflist1.iter() {
+    for tuple in ooflist1 {
         println!("{:?}", tuple);
     }
 
@@ -207,25 +248,25 @@ fn test_offset_calc() {
     }
 
     // Calculates the offset for a number of position parameters
-    pub fn calculate_offsets(radius: f32) -> Vec<(f32, f32)> {
-        // Initialize list with origin offset (0,0)
-        let mut offset_list: Vec<(f32, f32)> = Vec::new();
-        offset_list.push((0.0, 0.0));
+    //pub fn calculate_offsets(radius: f32) -> Vec<(f32, f32)> {
+    //    // Initialize list with origin offset (0,0)
+     //   let mut offset_list: Vec<(f32, f32)> = Vec::new();
+     //   offset_list.push((0.0, 0.0));
 
         // Generate other offsets
-        for i in 1..4 {
-            let shell: f32 = i as f32;
+     //   for i in 1..4 {
+    //        let shell: f32 = i as f32;
 
             // Generate i*4 positions for each shell
-            for j in (0..(i * 4)) {
-                let rads: f32 = (j as f32) * ((3.141592654) / (2.0 * shell)); // Calculate angle of current offset
-                offset_list.push((shell * radius * (rads.cos()), shell * radius * (rads.sin()))); // Push scaled coordinates onto array
-            }
-        }
+    //        for j in (0..(i * 4)) {
+    //            let rads: f32 = (j as f32) * ((3.141592654) / (2.0 * shell)); // Calculate angle of current offset
+     //           offset_list.push((shell * radius * (rads.cos()), shell * radius * (rads.sin()))); // Push scaled coordinates onto array
+     //       }
+     //   }
 
         // Return generated offsets
-        offset_list
-    }
+     //   offset_list
+    //}
 }
 
 /// Represents a member of a swarm
@@ -247,7 +288,7 @@ impl SwarmMember {
             x: x,
             y: y,
             direction: 0.0,
-            health: 1,
+            health: 5,
         }
     }
 }
