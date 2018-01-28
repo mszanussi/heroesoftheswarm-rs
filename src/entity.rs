@@ -13,8 +13,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with heroesoftheswarm.  If not, see <http://www.gnu.org/licenses/>.
-use swarm_language::SwarmProgram;
-use swarm_language::SwarmCommand;
+use swarm_language::{Formation, SwarmCommand, SwarmProgram};
 use world::World;
 use std::f32;
 use rand::{thread_rng, Rng};
@@ -43,15 +42,20 @@ pub struct Swarm {
     pub color: (u8, u8, u8),
     /// Experience gained by the swarm
     pub experience: i64,
-    /// Duration of bullets in ticks
+    /// Fire cooldown in ticks
     #[serde(skip_serializing)]
-    pub bullet_duration: i16,
+    pub fire_cooldown: i64,
+    /// Formation cooldown in ticks
+    #[serde(skip_serializing)]
+    pub formation_cooldown: i64,
     /// Program used to execute the swarm
     #[serde(skip_serializing)]
     pub program: SwarmProgram,
 }
 /// Functions for a swarm
 impl Swarm {
+    /// Swarm speed
+    const UPDATE_DISTANCE: f32 = 5.0;
     /// Constructor
     pub fn new(x: f32, y: f32, num_members: usize) -> Self {
         // Build the offsets
@@ -65,7 +69,8 @@ impl Swarm {
             offsets: offsets,
             color: (0, 0, 0),
             experience: 0,
-            bullet_duration: 60, // 60fps * 1 seconds default duration
+            fire_cooldown: 0,      // start with no cooldown
+            formation_cooldown: 0, // start with no cooldown
             program: SwarmProgram::new(vec![
                 SwarmCommand::MOVE,
                 SwarmCommand::TURN(10.0),
@@ -90,6 +95,12 @@ impl Swarm {
         // Return the swarm
         swarm
     }
+
+    /// Adds experience based on stuff TODO TODO
+    pub fn add_experience(&mut self, amt: &i64) {
+        self.experience += amt;
+    }
+
     /// Supplementary function to add color to a swarm. Typically used with the constructor
     pub fn with_color(mut self, color: (u8, u8, u8)) -> Self {
         self.color = color;
@@ -104,7 +115,11 @@ impl Swarm {
         bullets: &mut Vec<Bullet>,
     ) {
         // TODO: put this somewhere else
-        let swarm_update_distance: f32 = 5.0;
+
+        if self.members.len() <= 0 {
+            self.experience = 0;
+        }
+
         if self.program.commands.len() != 0 {
             match self.program.commands[self.program.program_counter] {
                 SwarmCommand::MOVE => {
@@ -118,11 +133,57 @@ impl Swarm {
                     }
 
                     // Update the x and y position
-                    self.x += swarm_update_distance * self.direction.to_radians().cos();
-                    self.y -= swarm_update_distance * self.direction.to_radians().sin();
+                    self.x += Swarm::UPDATE_DISTANCE * self.direction.to_radians().cos();
+                    self.y -= Swarm::UPDATE_DISTANCE * self.direction.to_radians().sin();
                 }
+                SwarmCommand::LEFT => {
+                    // When within EPSILON of edge of the world, bounce off it
+                    const EPSILON: f32 = 10.0;
+                    if self.x - EPSILON >= 0.0 && self.x + EPSILON < world_width
+                        && self.y - EPSILON >= 0.0
+                        && self.y + EPSILON < world_height
+                    {
+                        self.x += Swarm::UPDATE_DISTANCE;
+                    }
+                }
+                SwarmCommand::RIGHT => {
+                    // When within EPSILON of edge of the world, bounce off it
+                    const EPSILON: f32 = 10.0;
+                    if self.x - EPSILON >= 0.0 && self.x + EPSILON < world_width
+                        && self.y - EPSILON >= 0.0
+                        && self.y + EPSILON < world_height
+                    {
+                        self.x -= Swarm::UPDATE_DISTANCE;
+                    }
+                }
+                SwarmCommand::UP => {
+                    // When within EPSILON of edge of the world, bounce off it
+                    const EPSILON: f32 = 10.0;
+                    if self.x - EPSILON >= 0.0 && self.x + EPSILON < world_width
+                        && self.y - EPSILON >= 0.0
+                        && self.y + EPSILON < world_height
+                    {
+                        self.y -= Swarm::UPDATE_DISTANCE;
+                    }
+                }
+                SwarmCommand::DOWN => {
+                    // When within EPSILON of edge of the world, bounce off it
+                    const EPSILON: f32 = 10.0;
+                    if self.x - EPSILON >= 0.0 && self.x + EPSILON < world_width
+                        && self.y - EPSILON >= 0.0
+                        && self.y + EPSILON < world_height
+                    {
+                        self.y += Swarm::UPDATE_DISTANCE;
+                    }
+                }
+
                 SwarmCommand::FIRE => {
-                    self.fire(swarm_id, bullets);
+                    // TODO maybe change the fire_cooldown scalar depending
+                    // on what kind of weapon is fired?
+                    if self.fire_cooldown == 0 {
+                        self.fire(swarm_id, bullets);
+                        self.fire_cooldown = 10; // 60fps * 0.5 seconds
+                    }
                 }
                 SwarmCommand::TURN(turn_amt) => {
                     // turn logic
@@ -134,12 +195,46 @@ impl Swarm {
                         member.direction %= 360.0;
                     }
                 }
+
+                SwarmCommand::FORMATION(formation) => if self.formation_cooldown == 0 {
+                    match formation {
+                        Formation::GATHER => {
+                            for (index, member) in self.members.iter_mut().enumerate() {
+                                member.x = self.offsets[index].0;
+                                member.y = self.offsets[index].1;
+                            }
+                        }
+                        Formation::SPREAD => {
+                            for (index, member) in self.members.iter_mut().enumerate() {
+                                member.x = self.offsets[self.offsets.len() - (1 + index)].0;
+                                member.y = self.offsets[self.offsets.len() - (1 + index)].1;
+                            }
+                        }
+						
+						Formation::SIERPINSKI(val) => {
+							let sierpinski: Vec<(f32,f32)> = Swarm::sierpinski_offset(val);
+							for (index, member) in self.members.iter_mut().enumerate(){
+								member.x = sierpinski[sierpinski.len() - (1 + index)].0;
+								member.y = sierpinski[sierpinski.len() - (1 + index)].1;
+							}
+						}
+                    };
+                    self.formation_cooldown = 30
+                },
                 SwarmCommand::NOOP => {}
             }
 
             // Update program_counter to point to next command
             self.program.program_counter += 1;
             self.program.program_counter %= self.program.commands.len();
+        }
+        self.fire_cooldown -= 1;
+        self.formation_cooldown -= 1;
+        if self.fire_cooldown < 0 {
+            self.fire_cooldown = 0;
+        }
+        if self.formation_cooldown < 0 {
+            self.formation_cooldown = 0;
         }
     }
 
@@ -151,7 +246,7 @@ impl Swarm {
                 self.x + member.x,
                 self.y + member.y,
                 self.direction,
-                self.bullet_duration,
+                //self.bullet_duration,
             );
             bullets.push(new_bullet);
         }
@@ -306,29 +401,35 @@ pub struct Bullet {
     /// Direction in degrees
     pub direction: f32,
     /// Duration of bullet in ticks; counts down to 0
-    pub duration: i16,
+    #[serde(skip_serializing)]
+    pub duration: i64,
 }
 
 /// Functions for a bullet
 impl Bullet {
+    /// Bullet speed
+    const UPDATE_DISTANCE: f32 = 5.0;
+    /// Default lifetime of bullet
+    const LIFETIME: i64 = 90;
     /// Constructor
     // TODO: add arguments
-    pub fn new(owner: usize, x: f32, y: f32, direction: f32, duration: i16) -> Self {
+    pub fn new(owner: usize, x: f32, y: f32, direction: f32) -> Self {
         Bullet {
             owner: owner,
             x: x,
             y: y,
             direction: direction,
-            duration: duration,
+            duration: Bullet::LIFETIME,
         }
     }
+
     /// Performs 1 tick
     pub fn update(&mut self) {
         // TODO: put this somewhere else
         let bullet_update_distance: f32 = 20.0;
         // Update the x and y position
-        self.x += bullet_update_distance * self.direction.to_radians().cos();
-        self.y -= bullet_update_distance * self.direction.to_radians().sin();
+        self.x += Bullet::UPDATE_DISTANCE * self.direction.to_radians().cos();
+        self.y -= Bullet::UPDATE_DISTANCE * self.direction.to_radians().sin();
         // Update duration by ticks
         self.duration -= 1;
         // TODO: Check collision
@@ -402,7 +503,7 @@ mod tests {
 
     #[test]
     fn update_bullet() {
-        let mut bullet = Bullet::new(0, 0.0, 0.0, 0.0, 5);
+        let mut bullet = Bullet::new(0, 0.0, 0.0, 0.0);
         bullet.direction = 90.0;
         bullet.update();
         assert!(bullet.x - 1. <= f32::EPSILON);

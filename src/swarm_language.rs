@@ -26,12 +26,47 @@ const MAX_NUM_COMMANDS: usize = 20;
 pub enum SwarmCommand {
     /// Move the swarm forward
     MOVE,
+    /// Move the swarm left
+    LEFT,
+    /// Move the swarm right
+    RIGHT,
+    /// Move the swarm up
+    UP,
+    /// Move the swarm down
+    DOWN,
     /// Swarm fires a bullet in indicated direction
     FIRE,
     /// Rotate the swarm some number of degrees
     TURN(f32),
     /// Do nothing
     NOOP,
+    /// Move into a formation
+    FORMATION(Formation),
+}
+#[derive(Clone, Copy, Debug, PartialEq)]
+/// A formation
+pub enum Formation {
+    /// Gather together
+    GATHER,
+    /// Spread apart
+    SPREAD,
+	/// Sierpinski formation
+	SIERPINSKI(u32),
+}
+
+/// Allows conversion of a string to a command
+impl FromStr for Formation {
+    /// The type of error returned if the conversion fails
+    /// Must be implemented
+    type Err = GenericError;
+    /// Converts a string to a SwarmCommand
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "GATHER" => Ok(Formation::GATHER),
+            "SPREAD" => Ok(Formation::SPREAD),
+            _ => Err(GenericError::new("Invalid formation name".into())),
+        }
+    }
 }
 /// Allows conversion of a string to a command
 impl FromStr for SwarmCommand {
@@ -53,8 +88,12 @@ impl FromStr for SwarmCommand {
 		let opcode: String = command[0].to_uppercase().into();
 		
         // Match
-        match &opcode[..] {
+        match command[0].to_uppercase().as_str() {
             "MOVE" => Ok(SwarmCommand::MOVE), // Move command case
+            "LEFT" => Ok(SwarmCommand::LEFT), // left strafe
+            "RIGHT" => Ok(SwarmCommand::RIGHT), // left strafe
+            "UP" => Ok(SwarmCommand::UP), // left strafe
+            "DOWN" => Ok(SwarmCommand::DOWN), // left strafe
             "FIRE" => Ok(SwarmCommand::FIRE), // Fire Command case
             "NOOP" => Ok(SwarmCommand::NOOP), // Noop command case
             "TURN" => {
@@ -62,19 +101,22 @@ impl FromStr for SwarmCommand {
                 // Check if turn parameter was provided
                 {
                     match command[1].parse::<f32>() {
-                        Ok(val) => if val.is_normal() {
-                            if (val.abs() <= 30.0_f32) {
-                                Ok(SwarmCommand::TURN(val)) // If value satisfies clamp conditions,
+                        Ok(val) => {
+                            if val.is_normal() {
+                                if (val.abs() <= 30.0_f32) {
+                                    Ok(SwarmCommand::TURN(val)) // If value satisfies clamp conditions,
+                                } else {
+                                    Err(GenericError::new(
+                                        "Input parameter float should range from -30.0 to 30.0."
+                                            .into(),
+                                    )) // Otherwise, throw compilation error
+                                }
                             } else {
                                 Err(GenericError::new(
-                                    "Input parameter float should range from -30.0 to 30.0.".into(),
-                                )) // Otherwise, throw compilation error
+                                    "Invalid float parameter for TURN.".into(), // If parameter is not normal, throw error
+                                ))
                             }
-                        } else {
-                            Err(GenericError::new(
-                                "Invalid float parameter for TURN.".into(), // If parameter is not normal, throw error
-                            ))
-                        },
+                        }
 
                         Err(_) => Err(GenericError::new(
                             "Invalid float parameter for TURN.".into(),
@@ -84,6 +126,46 @@ impl FromStr for SwarmCommand {
                     Err(GenericError::new("No parameters found for TURN.".into())) // No parameter provided
                 }
             }
+			
+			
+			
+            "FORMATION" => {
+                if command.len() >= 2 {
+                    let formation: Formation = match command[1].parse() {
+                        Ok(formation) => formation,
+                        Err(err) => return Err(err),
+                    };
+					
+					let form_string = match command[1].parse::<String>()
+					{
+						Ok(val) => val,
+						Err(_) => return Err(GenericError::new("Formation specification failed to parse.".into())),
+					};
+					
+					if (form_string.to_uppercase() == "SIERPINSKI")
+					{
+						if (command.len() == 3)
+						{
+							match command[2].parse::<u32>()
+							{
+								Ok(val) => return Ok(SwarmCommand::FORMATION(Formation::SIERPINSKI(val))),
+								Err(_) => return Err(GenericError::new("Invalid parameter for Sierpinski formation.".into()))
+							}
+						}
+						else
+						{
+							return Err(GenericError::new("Insufficient parameters for Sierpinski formation".into()))
+						}
+					}
+					else
+					{
+					    Ok(SwarmCommand::FORMATION(formation))
+					}
+
+                } else {
+                    Err(GenericError::new("Invalid number of arguments for command FORMATION. FORMATION requires 1 argument".into()))
+                }
+            }
             _ => Err(
                 GenericError::new("Command not recognized.".into()), // Invalid command case
             ),
@@ -91,10 +173,15 @@ impl FromStr for SwarmCommand {
     }
 }
 
+/* BROKEN IN MERGE
 /// Test the string conversion command
 #[test]
 fn test_verifier() {
+<<<<<<< HEAD
     let c1: SwarmCommand = match "nOOp".parse() {
+=======
+    let c1: SwarmCommand = match "noop".parse() {
+>>>>>>> 8704acfeb3ccf4cb027a92c09a035e7096ca3cc0
         Ok(com1) => com1,
         Err(error) => panic!("Error encountered: {}", error),
     };
@@ -112,7 +199,7 @@ fn test_verifier() {
     assert_eq!(c1, SwarmCommand::NOOP);
     assert_eq!(c2, SwarmCommand::MOVE);
     assert_eq!(c3, SwarmCommand::TURN(-29.5));
-}
+} END BROKEN IN MERGE */
 
 /// A swarm program is a list of swarm commands
 #[derive(Clone, Debug)]
@@ -151,11 +238,13 @@ impl FromStr for SwarmProgram {
         for line in s.trim().lines() {
             command_list.push(match line.parse() {
                 Ok(comm) => comm, // If the command is valid, add it to the list
-                Err(error) => if line.trim().is_empty() {
-                    continue;
-                } else {
-                    return Err(error);
-                }, // If the command is invalid, throw an error
+                Err(error) => {
+                    if line.trim().is_empty() {
+                        continue;
+                    } else {
+                        return Err(error);
+                    }
+                } // If the command is invalid, throw an error
             });
 
             // If the command list size is exceeded, throw an error

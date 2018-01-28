@@ -15,6 +15,7 @@
 // along with heroesoftheswarm.  If not, see <http://www.gnu.org/licenses/>.
 extern crate serde_json;
 use entity::{Bullet, Swarm};
+use swarm_language::SwarmProgram;
 use std::collections::HashMap;
 use rand::{thread_rng, Rng};
 use std::time::{Duration, Instant};
@@ -31,6 +32,10 @@ pub struct World {
     /// Each bullet in the world
     /// TODO: vec and element swap
     pub bullets: Vec<Bullet>,
+
+    /// Leaderboard of players, from 1st place to 10th place
+    /// Tuple of (ID, experience)
+    pub leaderboard: Vec<(usize, i64)>,
 }
 /// Functions for the world
 impl World {
@@ -43,6 +48,7 @@ impl World {
             height: height,
             swarms: HashMap::new(),
             bullets: Vec::new(),
+            leaderboard: Vec::new(),
         }
     }
     /// Capacity constructor
@@ -56,6 +62,7 @@ impl World {
             height: height,
             swarms: HashMap::with_capacity(capacity),
             bullets: Vec::with_capacity(capacity * 10),
+            leaderboard: Vec::new(),
         }
     }
     /// Adds a player to the server with the given ID
@@ -80,11 +87,34 @@ impl World {
         }
         // Remove the player's bullets
         let mut index: usize = 0;
+
         while index < self.bullets.len() {
             if self.bullets[index].owner == id {
                 self.bullets.swap_remove(index);
             }
             index += 1;
+        }
+    }
+
+    /// Keep track of top 10 players
+    pub fn update_leaderboard(&mut self) {
+        let mut scores: Vec<(usize, i64)> = Vec::new();
+
+        for (id, swarm) in self.swarms.iter() {
+            scores.push((*id, swarm.experience));
+        }
+
+        self.leaderboard = scores.into_iter().collect::<Vec<(usize, i64)>>();
+        self.leaderboard.sort();
+        self.leaderboard.reverse();
+        self.leaderboard = self.leaderboard.iter().cloned().take(10).collect();
+    }
+
+    /// Updates a player's program
+    pub fn update_program(&mut self, player_id: usize, program: SwarmProgram) {
+        match self.swarms.get_mut(&player_id) {
+            Some(swarm) => swarm.program = program,
+            None => warn!("Invalid player id: {}", player_id),
         }
     }
     /// Generates a random position
@@ -115,6 +145,11 @@ impl World {
     pub fn update(&mut self) -> Duration {
         // Record time at beginning of update
         let start_time = Instant::now();
+        let mut exp_queue: Vec<(usize, i64)> = Vec::new();
+
+        // start by updating leaderboard
+        self.update_leaderboard();
+
         // Update each member of the swarm with its own program
         for (id, swarm) in self.swarms.iter_mut() {
             swarm.update(*id, self.width, self.height, &mut self.bullets);
@@ -123,6 +158,7 @@ impl World {
         // Update each bullet
         let mut i: usize = 0;
         let mut upper_bound_bullets: usize = self.bullets.len();
+		
         'outer: while i < upper_bound_bullets {
             // position update bullets
 
@@ -176,6 +212,13 @@ impl World {
                     }
                 }
             }
+            // update appropriate experience
+            for &(id, exp) in exp_queue.iter() {
+                if let Some(mut e_swarm) = self.swarms.get_mut(&id) {
+                    e_swarm.experience += exp;
+                }
+            }
+            exp_queue.clear();
             // increment to next bullet
             i += 1;
         }
@@ -204,5 +247,14 @@ mod tests {
     #[test]
     fn initialize_world() {
         let world = World::new(1000.0, 1000.0);
+    }
+    #[test]
+    fn test_leaderboard() {
+        let mut world = World::new(1000.0, 1000.0);
+        for i in 0..20 {
+            world.add_player(i);
+            println!("{:?}", world.leaderboard);
+        }
+        assert!(world.leaderboard.len() <= 10);
     }
 }
