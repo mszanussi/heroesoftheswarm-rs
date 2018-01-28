@@ -46,13 +46,15 @@ impl FromStr for SwarmCommand {
 		
 		if (command.len() == 0)
 			{return Err(GenericError{ description: "Command is white space (should be non-error).".into()})};
-
+			
+			
         // Match
-        match &command[0] {
-            &"MOVE" => Ok(SwarmCommand::MOVE), // Move command case
-			&"FIRE" => Ok(SwarmCommand::FIRE), // Fire Command case
-            &"NOOP" => Ok(SwarmCommand::NOOP), // Noop command case
-            &"TURN" => {
+		let opcode = &command[0].to_uppercase()[..];
+        match opcode {
+            "MOVE" => Ok(SwarmCommand::MOVE), // Move command case
+			"FIRE" => Ok(SwarmCommand::FIRE), // Fire Command case
+            "NOOP" => Ok(SwarmCommand::NOOP), // Noop command case
+            "TURN" => {
                 if command.len() == 2	// Check if turn parameter was provided
                 {
                     match command[1].parse::<f32>() {
@@ -89,17 +91,17 @@ impl FromStr for SwarmCommand {
 /// Test the string conversion command
 #[test]
 fn test_verifier() {
-    let c1: SwarmCommand = match "NOOP".parse() {
+    let c1: SwarmCommand = match "nOOp".parse() {
         Ok(com1) => com1,
         Err(error) => panic!("Error encountered: {}", error),
     };
 
-    let c2: SwarmCommand = match "MOVE".parse() {
+    let c2: SwarmCommand = match "MOve".parse() {
         Ok(com2) => com2,
         Err(error) => panic!("Error encountered: {}", error),
     };
 
-    let c3: SwarmCommand = match "TURN -29.5".parse() {
+    let c3: SwarmCommand = match "turn -29.5".parse() {
         Ok(com3) => com3,
         Err(error) => panic!("Error encountered: {}", error),
     };
