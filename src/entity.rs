@@ -31,16 +31,19 @@ pub struct Swarm {
     /// Y position
     pub y: f32,
     /// Direction the swarm is facing
+    #[serde(skip_serializing)]
     pub direction: f32,
     /// Members of the swarm
-    pub members: Vec<Option<SwarmMember>>,
+    pub members: Vec<SwarmMember>,
     /// Offsets
+    #[serde(skip_serializing)]
     pub offsets: Vec<(f32, f32)>,
     /// Color of the swarm
     pub color: (u8, u8, u8),
     /// Experience gained by the swarm
     pub experience: i64,
     /// Duration of bullets in ticks
+    #[serde(skip_serializing)]
     pub bullet_duration: i16,
     /// Program used to execute the swarm
     #[serde(skip_serializing)]
@@ -76,12 +79,12 @@ impl Swarm {
         }
     }
     /// Builds a swarm of N members
-    pub fn build_swarm(num_members: usize, offsets: &Vec<(f32, f32)>) -> Vec<Option<SwarmMember>> {
+    pub fn build_swarm(num_members: usize, offsets: &Vec<(f32, f32)>) -> Vec<SwarmMember> {
         // Vector to store the swarm
-        let mut swarm: Vec<Option<SwarmMember>> = Vec::with_capacity(num_members);
+        let mut swarm = Vec::with_capacity(num_members);
         // add the members
         for i in 0..num_members {
-            swarm.push(Some(SwarmMember::new(offsets[i].0, offsets[i].1)))
+            swarm.push(SwarmMember::new(offsets[i].0, offsets[i].1))
         }
         // Return the swarm
         swarm
@@ -100,7 +103,7 @@ impl Swarm {
         bullets: &mut Vec<Bullet>,
     ) {
         // TODO: put this somewhere else
-        let swarm_update_distance: f32 = 10.0;
+        let swarm_update_distance: f32 = 5.0;
         if self.program.commands.len() != 0 {
             match self.program.commands[self.program.program_counter] {
                 SwarmCommand::MOVE => {
@@ -126,13 +129,8 @@ impl Swarm {
                     // Keep direction and program counter within their bounds
                     self.direction %= 360.0;
                     for member in self.members.iter_mut() {
-                        match member {
-                            &mut Some(mut member) => {
-                                member.direction += turn_amt;
-                                member.direction %= 360.0;
-                            }
-                            &mut None => {}
-                        }
+                        member.direction += turn_amt;
+                        member.direction %= 360.0;
                     }
                 }
                 SwarmCommand::NOOP => {}
@@ -147,19 +145,14 @@ impl Swarm {
     pub fn fire(&self, swarm_id: usize, bullets: &mut Vec<Bullet>) {
         // spawn bullet with velocity vector
         for member in &self.members {
-            match member {
-                &Some(cur_swarm_member) => {
-                    let new_bullet: Bullet = Bullet::new(
-                        swarm_id,
-                        self.x + cur_swarm_member.x,
-                        self.y + cur_swarm_member.y,
-                        self.direction,
-                        self.bullet_duration,
-                    );
-                    bullets.push(new_bullet);
-                }
-                &None => {}
-            }
+            let new_bullet: Bullet = Bullet::new(
+                swarm_id,
+                self.x + member.x,
+                self.y + member.y,
+                self.direction,
+                self.bullet_duration,
+            );
+            bullets.push(new_bullet);
         }
     }
 
@@ -175,8 +168,10 @@ impl Swarm {
 
             // Generate i*4 positions for each shell
             for j in 0..(i * 4) {
-                let rads: f32 = (j as f32) * ((3.141592654) / (2.0 * shell)); // Calculate angle of current offset
-                offset_list.push((shell * radius * (rads.cos()), shell * radius * (rads.sin()))); // Push scaled coordinates onto array
+                // Calculate angle of current offset
+                let rads: f32 = (j as f32) * ((f32::consts::PI) / (2.0 * shell));
+                // Push scaled coordinates onto array
+                offset_list.push((shell * radius * rads.cos(), shell * radius * rads.sin()));
             }
         }
 
@@ -202,31 +197,27 @@ fn test_offset_calc() {
     for tuple in ooflist2.iter() {
         println!("{:?}", tuple);
     }
-	
-	// Calculates the offset for a number of position parameters
-	pub fn calculate_offsets(radius: f32) -> Vec<(f32,f32)>
-	{	
-		// Initialize list with origin offset (0,0)
-		let mut offset_list: Vec<(f32, f32)> = Vec::new();
-		offset_list.push((0.0, 0.0));
-		
-		// Generate other offsets
-		for i in (1..4)
-		{
-			let shell: f32 = i as f32;
-		
-			// Generate i*4 positions for each shell
-			for j in (0..(i*4))
-			{
-				let rads: f32 = (j as f32)*((3.141592654)/(2.0*shell));						// Calculate angle of current offset
-				offset_list.push((shell*radius*(rads.cos()), shell*radius*(rads.sin())));	// Push scaled coordinates onto array
-			}
-		}
-		
-		// Return generated offsets
-		offset_list
-	}
-	
+
+    // Calculates the offset for a number of position parameters
+    pub fn calculate_offsets(radius: f32) -> Vec<(f32, f32)> {
+        // Initialize list with origin offset (0,0)
+        let mut offset_list: Vec<(f32, f32)> = Vec::new();
+        offset_list.push((0.0, 0.0));
+
+        // Generate other offsets
+        for i in 1..4 {
+            let shell: f32 = i as f32;
+
+            // Generate i*4 positions for each shell
+            for j in (0..(i * 4)) {
+                let rads: f32 = (j as f32) * ((3.141592654) / (2.0 * shell)); // Calculate angle of current offset
+                offset_list.push((shell * radius * (rads.cos()), shell * radius * (rads.sin()))); // Push scaled coordinates onto array
+            }
+        }
+
+        // Return generated offsets
+        offset_list
+    }
 }
 
 /// Represents a member of a swarm
@@ -278,19 +269,19 @@ impl Bullet {
             owner: owner,
             x: x,
             y: y,
-            direction: 0.0,
+            direction: direction,
             duration: duration,
         }
     }
     /// Performs 1 tick
     pub fn update(&mut self) {
         // TODO: put this somewhere else
-        let bullet_update_distance: f32 = 1.0;
+        let bullet_update_distance: f32 = 20.0;
         // Update the x and y position
         self.x += bullet_update_distance * self.direction.to_radians().cos();
         self.y -= bullet_update_distance * self.direction.to_radians().sin();
         // Update duration by ticks
-        self.duration -= 1
+        self.duration -= 1;
         // TODO: Check collision
     }
 }

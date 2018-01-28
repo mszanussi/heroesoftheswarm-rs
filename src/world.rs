@@ -74,8 +74,17 @@ impl World {
     /// Removes a player to the server with the given ID
     pub fn remove_player(&mut self, id: usize) {
         info!("Removing player {} from the server", id);
+        // Remove the player's data
         match self.swarms.remove(&id) {
             _ => {}
+        }
+        // Remove the player's bullets
+        let mut index: usize = 0;
+        while index < self.bullets.len() {
+            if self.bullets[index].owner == id {
+                self.bullets.swap_remove(index);
+            }
+            index += 1;
         }
     }
     /// Generates a random position
@@ -112,9 +121,9 @@ impl World {
         }
 
         // Update each bullet
-
         let mut i: usize = 0;
-        while i < self.bullets.len() {
+        let mut upper_bound_bullets: usize = self.bullets.len();
+        'outer: while i < upper_bound_bullets {
             // position update bullets
 
             self.bullets[i].update();
@@ -122,8 +131,8 @@ impl World {
             // remove expired bullets
             if self.bullets[i].duration == 0 {
                 self.bullets.swap_remove(i);
-                i += 1;
-
+                upper_bound_bullets -= 1;
+                continue;
             }
 
             // collision detection here
@@ -132,39 +141,37 @@ impl World {
             for (id, swarm) in self.swarms.iter_mut() {
                 // TODO: choose the epsilon to consider as "incoming dangerous
                 // bullets"
-                let epsilon: f32 = 10.0;
-                if self.bullets[i].x - swarm.x <= epsilon &&
-                    self.bullets[i].y - swarm.y <= epsilon
+                let epsilon: f32 = 60.0;
+                if (self.bullets[i].x - swarm.x).abs() <= epsilon
+                    && (self.bullets[i].y - swarm.y).abs() <= epsilon
                 {
                     let mut j: usize = 0;
-                    while j < swarm.members.len() {
+                    let mut upper_bound_members = swarm.members.len();
+                    while j < upper_bound_members {
                         // collision detection
-                        let swarm_member_radius: f32 = 5.0;
-
+                        let swarm_member_radius: f32 = 10.0;
                         // unwrap member
-                        match swarm.members[j] {
-                            Some(mut member) => {
-                                // detect colllision
-                                // for now detects if the bullet passes within a
-                                // square hitbox around the swarm member
-                                if (self.bullets[i].x - member.x).abs() <= swarm_member_radius &&
-                                    (self.bullets[i].y - member.y).abs() <= swarm_member_radius
-                                {
-                                    member.health -= 1;
-
-                                    if member.health == 0 {
-                                        swarm.members[j] = None;
-                                        // increment to next member if member was set to None
-                                        j += 1;
-                                    }
-                                    // delete bullet
-                                    self.bullets.swap_remove(i);
-                                    i += 1;
-                                }
+                        // detect colllision
+                        // for now detects if the bullet passes within a
+                        // square hitbox around the swarm member
+                        if (self.bullets[i].x - (swarm.x + swarm.members[j].x)).abs()
+                            <= swarm_member_radius
+                            && (self.bullets[i].y - (swarm.y + swarm.members[j].y)).abs()
+                                <= swarm_member_radius
+                            && self.bullets[i].owner != *id
+                        {
+                            swarm.members[j].health -= 1;
+                            debug!("HIT");
+                            if swarm.members[j].health == 0 {
+                                debug!("KILL");
+                                swarm.members.swap_remove(j);
+                                upper_bound_members -= 1;
                             }
-                            None => {}
+                            // delete bullet
+                            self.bullets.swap_remove(i);
+                            upper_bound_bullets -= 1;
+                            continue 'outer;
                         }
-                        // increment to next member
                         j += 1;
                     }
                 }
